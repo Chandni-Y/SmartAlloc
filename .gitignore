@@ -7,3 +7,4 @@ firestore-debug.log
 service-account.json
 .env
 functions/node_modules/
+node_modules

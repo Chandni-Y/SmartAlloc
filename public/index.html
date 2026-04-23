@@ -105,14 +105,16 @@
         reportForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="animate-pulse">AI is analyzing report...</span>';
+            submitBtn.innerHTML = '<span class="animate-pulse">Starting AI Analysis...</span>';
 
             const userDescription = description.value;
             const reporterName = document.getElementById('reporterName').value;
             const location = document.getElementById('location').value;
 
+            console.log("Submission started for:", reporterName);
+
             try {
-                // 1. AI Analysis (Client-side)
+                // 1. AI Analysis with Timeout
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const prompt = `
                     Analyze this problem report: "${userDescription}"
@@ -124,9 +126,23 @@
                     Only return the JSON object, nothing else.
                 `;
 
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                const aiData = JSON.parse(response.text().replace(/```json|```/g, "").trim());
+                console.log("Calling Gemini API...");
+                submitBtn.innerHTML = '<span class="animate-pulse">Gemini is thinking...</span>';
+
+                // Create a promise that rejects in 10 seconds
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("AI Analysis timed out")), 10000)
+                );
+
+                const aiPromise = (async () => {
+                    const result = await model.generateContent(prompt);
+                    const response = await result.response;
+                    return JSON.parse(response.text().replace(/```json|```/g, "").trim());
+                })();
+
+                // Race the AI against the timeout
+                const aiData = await Promise.race([aiPromise, timeoutPromise]);
+                console.log("AI Data received:", aiData);
 
                 // 2. Priority Logic
                 const score = (aiData.severity * 2) + (aiData.peopleAffected * 1);
@@ -150,6 +166,9 @@
                 }
 
                 // 4. Save to Firestore
+                console.log("Saving to Firestore...");
+                submitBtn.innerHTML = '<span class="animate-pulse">Saving to Database...</span>';
+                
                 await db.collection('problems').add({
                     reporterName,
                     location,
@@ -165,6 +184,7 @@
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
+                console.log("Success!");
                 reportForm.style.display = 'none';
                 successMessage.style.display = 'block';
             } catch (error) {
