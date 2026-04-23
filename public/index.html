@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Issue | Smart Resource Allocation</title>
+    <meta name="description" content="Report community issues for rapid AI-driven response and allocation.">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container animate-fade">
+        <nav>
+            <a href="index.html" class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                SmartAlloc
+            </a>
+            <div class="nav-links">
+                <a href="index.html" class="active">Report Issue</a>
+                <a href="problems.html">Live Dashboard</a>
+            </div>
+        </nav>
+
+        <main style="max-width: 600px; margin: 0 auto;">
+            <header style="margin-bottom: 2rem; text-align: center;">
+                <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">Report a Problem</h1>
+                <p style="color: var(--text-dim);">Tell us what's happening. Our system will prioritize it instantly.</p>
+            </header>
+
+            <div class="glass-card">
+                <form id="reportForm">
+                    <div class="form-group">
+                        <label for="reporterName">Your Name</label>
+                        <input type="text" id="reporterName" placeholder="Enter your name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="location">Location / Area</label>
+                        <input type="text" id="location" placeholder="e.g. Near West High School" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">What is the problem?</label>
+                        <textarea id="description" rows="4" placeholder="Describe the issue in detail..." required maxlength="500"></textarea>
+                        <div class="char-counter"><span id="charCount">0</span>/500</div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="submitBtn">Submit Report</button>
+                </form>
+            </div>
+
+            <div id="successMessage" style="display: none; text-align: center; margin-top: 2rem;" class="animate-fade">
+                <div style="color: var(--accent-green); font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem;">
+                    Report Submitted Successfully!
+                </div>
+                <p style="color: var(--text-dim); margin-bottom: 1.5rem;">The system is currently analyzing your report.</p>
+                <a href="problems.html" class="btn-primary" style="text-decoration: none; display: inline-block; width: auto;">View Dashboard</a>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Google AI SDK (Gemini) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        // CONFIGURATION
+        const firebaseConfig = {
+          apiKey: "AIzaSyCF4JbdZOWT8Pi0Uzt4APM6c4QMAI5fI9M",
+          authDomain: "smart-resource-allocatio-90d56.firebaseapp.com",
+          projectId: "smart-resource-allocatio-90d56",
+          storageBucket: "smart-resource-allocatio-90d56.firebasestorage.app",
+          messagingSenderId: "117836213633",
+          appId: "1:117836213633:web:d0efaeefd233c9703e8c80",
+          measurementId: "G-HSBTKK8WFC"
+        };
+
+        const GEMINI_API_KEY = "AIzaSyC9hWV3cHC31wSo5SGwEVGkZyRkB5ErGCc";
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+        const reportForm = document.getElementById('reportForm');
+        const description = document.getElementById('description');
+        const charCount = document.getElementById('charCount');
+        const submitBtn = document.getElementById('submitBtn');
+        const successMessage = document.getElementById('successMessage');
+
+        description.addEventListener('input', () => {
+            charCount.textContent = description.value.length;
+        });
+
+        reportForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="animate-pulse">AI is analyzing report...</span>';
+
+            const userDescription = description.value;
+            const reporterName = document.getElementById('reporterName').value;
+            const location = document.getElementById('location').value;
+
+            try {
+                // 1. AI Analysis (Client-side)
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const prompt = `
+                    Analyze this problem report: "${userDescription}"
+                    Extract the following information in JSON format:
+                    - type: (One of: Road, Water, Sewage, Medical, Electricity, Other)
+                    - severity: (Number 1-10)
+                    - peopleAffected: (Number 1-10)
+                    
+                    Only return the JSON object, nothing else.
+                `;
+
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                const aiData = JSON.parse(response.text().replace(/```json|```/g, "").trim());
+
+                // 2. Priority Logic
+                const score = (aiData.severity * 2) + (aiData.peopleAffected * 1);
+                let priority = "Low";
+                if (score > 15) priority = "High";
+                else if (score > 8) priority = "Medium";
+
+                // 3. Volunteer Match
+                const skillMap = { "Road": "Construction", "Water": "Plumbing", "Sewage": "Cleaning", "Medical": "Medical", "Electricity": "Electrician", "Other": "General" };
+                const requiredSkill = skillMap[aiData.type] || "General";
+                
+                const volunteerSnap = await db.collection("volunteers")
+                    .where("skill", "==", requiredSkill)
+                    .where("status", "==", "available")
+                    .limit(1)
+                    .get();
+
+                let suggestedVolunteer = null;
+                if (!volunteerSnap.empty) {
+                    suggestedVolunteer = volunteerSnap.docs[0].data().name;
+                }
+
+                // 4. Save to Firestore
+                await db.collection('problems').add({
+                    reporterName,
+                    location,
+                    description: userDescription,
+                    status: 'pending',
+                    type: aiData.type,
+                    severity: aiData.severity,
+                    peopleAffected: aiData.peopleAffected,
+                    priority,
+                    priorityScore: score,
+                    suggestedVolunteer,
+                    aiProcessed: true,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                reportForm.style.display = 'none';
+                successMessage.style.display = 'block';
+            } catch (error) {
+                console.error("Full error details:", error);
+                alert("Submission Error: " + error.message);
+                
+                // Fallback: save raw data if AI fails
+                try {
+                    await db.collection('problems').add({
+                        reporterName,
+                        location,
+                        description: userDescription,
+                        status: 'pending',
+                        priority: 'Low',
+                        aiProcessed: false,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    reportForm.style.display = 'none';
+                    successMessage.style.display = 'block';
+                } catch (fallbackError) {
+                    console.error("Fallback error:", fallbackError);
+                    alert("Even fallback failed: " + fallbackError.message);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Report';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

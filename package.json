@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "firebase-admin": "^13.8.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.15.0"
+  }
+}

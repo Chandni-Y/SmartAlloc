@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dashboard | Smart Resource Allocation</title>
+    <meta name="description" content="Real-time monitoring and resource allocation dashboard.">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container animate-fade">
+        <nav>
+            <a href="index.html" class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                SmartAlloc
+            </a>
+            <div class="nav-links">
+                <a href="index.html">Report Issue</a>
+                <a href="problems.html" class="active">Live Dashboard</a>
+            </div>
+        </nav>
+
+        <main>
+            <header style="margin-bottom: 3rem;">
+                <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">Resource Dashboard</h1>
+                <p style="color: var(--text-dim);">Real-time overview of reported issues and allocation status.</p>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="glass-card stat-item">
+                    <span class="stat-value" id="statTotal">0</span>
+                    <span class="stat-label">Total Reports</span>
+                </div>
+                <div class="glass-card stat-item">
+                    <span class="stat-value" id="statPending" style="color: var(--accent-orange);">0</span>
+                    <span class="stat-label">Pending</span>
+                </div>
+                <div class="glass-card stat-item">
+                    <span class="stat-value" id="statAssigned" style="color: var(--primary);">0</span>
+                    <span class="stat-label">Assigned</span>
+                </div>
+                <div class="glass-card stat-item">
+                    <span class="stat-value" id="statDone" style="color: var(--accent-green);">0</span>
+                    <span class="stat-label">Resolved</span>
+                </div>
+            </div>
+
+            <!-- Feed Section -->
+            <section>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h2 style="font-size: 1.5rem;">Recent Issues</h2>
+                    <div id="filterButtons" style="display: flex; gap: 1rem;">
+                        <!-- Filters added dynamically or static -->
+                    </div>
+                </div>
+
+                <div id="problemFeed" class="feed-grid">
+                    <!-- Skeleton loaders while fetching -->
+                    <div class="glass-card skeleton" style="height: 120px;"></div>
+                    <div class="glass-card skeleton" style="height: 120px;"></div>
+                    <div class="glass-card skeleton" style="height: 120px;"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // REPLACE WITH YOUR FIREBASE CONFIG
+        const firebaseConfig = {
+  apiKey: "AIzaSyCF4JbdZOWT8Pi0Uzt4APM6c4QMAI5fI9M",
+  authDomain: "smart-resource-allocatio-90d56.firebaseapp.com",
+  projectId: "smart-resource-allocatio-90d56",
+  storageBucket: "smart-resource-allocatio-90d56.firebasestorage.app",
+  messagingSenderId: "117836213633",
+  appId: "1:117836213633:web:d0efaeefd233c9703e8c80",
+  measurementId: "G-HSBTKK8WFC"
+};
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const problemFeed = document.getElementById('problemFeed');
+        const statTotal = document.getElementById('statTotal');
+        const statPending = document.getElementById('statPending');
+        const statAssigned = document.getElementById('statAssigned');
+        const statDone = document.getElementById('statDone');
+
+        // Real-time listener
+        db.collection('problems').orderBy('timestamp', 'desc').onSnapshot((snapshot) => {
+            let total = 0, pending = 0, assigned = 0, done = 0;
+            problemFeed.innerHTML = '';
+
+            if (snapshot.empty) {
+                problemFeed.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 3rem;">No reports found yet.</div>';
+            }
+
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                total++;
+                if (data.status === 'pending') pending++;
+                if (data.status === 'assigned') assigned++;
+                if (data.status === 'done') done++;
+
+                renderCard(data, doc.id);
+            });
+
+            // Update stats
+            statTotal.textContent = total;
+            statPending.textContent = pending;
+            statAssigned.textContent = assigned;
+            statDone.textContent = done;
+        }, (error) => {
+            console.error("Listener failed: ", error);
+            problemFeed.innerHTML = '<div style="text-align: center; color: var(--accent-red); padding: 3rem;">Error connecting to Firestore. Check console.</div>';
+        });
+
+        function renderCard(data, id) {
+            const card = document.createElement('div');
+            card.className = 'glass-card problem-card animate-fade';
+            
+            const priorityClass = data.priority ? `priority-${data.priority.toLowerCase()}` : 'priority-null';
+            const priorityText = data.priority || 'Unknown';
+            const statusClass = `status-${data.status}`;
+            
+            card.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 100px;">
+                    <span class="priority-tag ${priorityClass}">${priorityText}</span>
+                    <span style="font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">${data.type || 'General'}</span>
+                </div>
+                <div>
+                    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center;">
+                        <span class="status-indicator ${statusClass}"></span>
+                        ${data.location}
+                    </h3>
+                    <p style="color: var(--text-dim); font-size: 0.95rem;">${data.description}</p>
+                    <div style="margin-top: 0.8rem; font-size: 0.8rem; color: var(--text-dim);">
+                        <strong>${data.reporterName}</strong> • ${data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : 'Just now'}
+                        ${data.suggestedVolunteer ? `<br><span style="color: var(--primary);">Suggested: ${data.suggestedVolunteer}</span>` : ''}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <button class="btn-primary" style="padding: 0.5rem 1rem; width: auto; font-size: 0.8rem;" onclick="assignVolunteer('${id}', '${data.suggestedVolunteer || ''}')" ${data.status !== 'pending' ? 'disabled' : ''}>
+                        ${data.status === 'pending' ? 'Assign' : (data.status === 'assigned' ? 'Assigned' : 'Resolved')}
+                    </button>
+                </div>
+            `;
+            problemFeed.appendChild(card);
+        }
+
+        async function assignVolunteer(id, suggested) {
+            const volunteerName = suggested || prompt("Enter volunteer name:", "Volunteer Alpha");
+            if (volunteerName) {
+                try {
+                    await db.collection('problems').doc(id).update({
+                        status: 'assigned',
+                        assignedTo: volunteerName
+                    });
+                } catch (error) {
+                    console.error("Update failed: ", error);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
