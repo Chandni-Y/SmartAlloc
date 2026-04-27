@@ -1,9 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { MapPin, LayoutDashboard, UserPlus, Upload, ShieldCheck } from 'lucide-react';
+import { MapPin, LayoutDashboard, UserPlus, Upload, ShieldCheck, Users } from 'lucide-react';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Volunteer from './pages/Volunteer';
+import VolunteerList from './pages/VolunteerList';
 import NgoUpload from './pages/NgoUpload';
 
 const Navbar = () => {
@@ -32,7 +33,8 @@ const Navbar = () => {
       <div className="nav-links">
         <NavLink to="/" icon={MapPin}>Report Issue</NavLink>
         <NavLink to="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-        <NavLink to="/volunteer" icon={UserPlus}>Volunteer</NavLink>
+        <NavLink to="/volunteer" icon={UserPlus}>Join (Volunteer)</NavLink>
+        <NavLink to="/volunteer-list" icon={Users}>Volunteers</NavLink>
         <NavLink to="/ngo-upload" icon={Upload}>NGO Upload</NavLink>
       </div>
     </nav>
@@ -49,6 +51,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/volunteer" element={<Volunteer />} />
+            <Route path="/volunteer-list" element={<VolunteerList />} />
             <Route path="/ngo-upload" element={<NgoUpload />} />
           </Routes>
         </main>
