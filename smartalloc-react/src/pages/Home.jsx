@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
+import { Paperclip, X } from 'lucide-react';
+
 
 const Home = () => {
   const [formData, setFormData] = useState({ reporterName: '', location: '', description: '' });
@@ -11,6 +14,8 @@ const Home = () => {
   const [gpsLocation, setGpsLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [file, setFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
   const navigate = useNavigate();
 
   const handleGPS = () => {
@@ -33,6 +38,35 @@ const Home = () => {
     }
   };
 
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      if (selectedFile.type.startsWith('image/')) {
+        setFilePreview(URL.createObjectURL(selectedFile));
+      } else {
+        setFilePreview(null);
+      }
+    }
+  };
+
+  const removeFile = () => {
+    setFile(null);
+    setFilePreview(null);
+  };
+
+  // Helper to convert file to generative part
+  async function fileToGenerativePart(file) {
+    const base64EncodedDataPromise = new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    return {
+      inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    };
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -41,9 +75,10 @@ const Home = () => {
     const finalReporterName = isAnonymous ? "Anonymous" : reporterName;
 
     try {
-      // 1. AI Analysis (Local Gemma via Ollama)
+      // 1. AI Analysis (Local Gemma via Ollama - No Bandwidth)
+      // Note: Standard Gemma 2B is text-only. The image is uploaded to Firebase but not analyzed by the AI.
       const prompt = `Analyze this crisis report: "${description}". You must respond ONLY with a valid JSON object matching this exact format: {"type": "Road"|"Water"|"Sewage"|"Medical"|"Electricity"|"Other", "severity": 5, "peopleAffected": 10}. Do not include markdown formatting or extra text.`;
-      
+
       const ollamaRes = await fetch("http://localhost:11434/api/generate", {
         method: "POST",
         headers: {
@@ -59,13 +94,27 @@ const Home = () => {
 
       if (!ollamaRes.ok) throw new Error("Could not connect to local AI. Is Ollama running?");
       const ollamaData = await ollamaRes.json();
-
+      
       let aiData;
       try {
-        aiData = JSON.parse(ollamaData.response.trim());
+        const textResponse = ollamaData.response.trim();
+        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? jsonMatch[0] : textResponse;
+        aiData = JSON.parse(jsonStr);
       } catch (parseError) {
         console.error("Raw Output:", ollamaData.response);
         throw new Error("Local Gemma failed to return valid JSON. Please try again.");
+      }
+
+
+      // 1.5 Upload File to Storage if exists
+      let attachmentUrl = null;
+      let attachmentType = null;
+      if (file) {
+        const fileRef = ref(storage, `reports/${Date.now()}_${file.name}`);
+        const uploadResult = await uploadBytes(fileRef, file);
+        attachmentUrl = await getDownloadURL(uploadResult.ref);
+        attachmentType = file.type;
       }
 
       // 2. Geocoding & Weather
@@ -128,6 +177,8 @@ const Home = () => {
         trackingId: generatedId,
         status: 'pending',
         lat, lng,
+        attachmentUrl,
+        attachmentType,
         timestamp: serverTimestamp()
       });
 
@@ -187,6 +238,50 @@ const Home = () => {
           <div className="form-group">
             <label>Description</label>
             <textarea required rows="4" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="What is happening? E.g., 'A large tree has fallen and blocked the main road.'" />
+          </div>
+
+          <div className="form-group">
+            <label>Attachment (Image/Video)</label>
+            <div className="file-upload-container" style={{ 
+              border: '2px dashed rgba(255,255,255,0.1)', 
+              borderRadius: '0.5rem', 
+              padding: '1.5rem', 
+              textAlign: 'center',
+              position: 'relative',
+              background: 'rgba(255,255,255,0.02)'
+            }}>
+              {!file ? (
+                <>
+                  <input 
+                    type="file" 
+                    accept="image/*,video/*" 
+                    onChange={handleFileChange} 
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} 
+                  />
+                  <div style={{ color: 'var(--text-dim)' }}>
+                    <Paperclip size={24} style={{ marginBottom: '0.5rem' }} />
+                    <p>Click or drag to upload image or video</p>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                  {filePreview ? (
+                    <img src={filePreview} alt="Preview" style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '0.3rem' }} />
+                  ) : (
+                    <div style={{ width: '60px', height: '60px', background: 'rgba(255,255,255,0.1)', borderRadius: '0.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Paperclip size={20} />
+                    </div>
+                  )}
+                  <div style={{ textAlign: 'left', flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>{file.name}</p>
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-dim)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                  <button type="button" onClick={removeFile} style={{ background: 'rgba(239, 68, 68, 0.2)', border: 'none', color: 'var(--accent-red)', padding: '0.4rem', borderRadius: '50%', cursor: 'pointer' }}>
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="form-group" style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '0.8rem', marginTop: '1rem' }}>
