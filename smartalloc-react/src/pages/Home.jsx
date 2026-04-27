@@ -221,7 +221,7 @@ const Home = () => {
   }
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+    <div className="responsive-container">
       <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <h1>Report a Problem</h1>
         <p style={{ color: 'var(--text-dim)' }}>AI-driven crisis response and resource allocation.</p>

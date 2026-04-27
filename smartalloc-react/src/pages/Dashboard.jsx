@@ -177,7 +177,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div style={{ height: '600px', position: 'sticky', top: '2rem' }}>
+      <div className="map-container-outer">
         <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: '1.5rem', background: '#1e293b' }}>
           {!mapLoaded && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><Loader2 className="animate-pulse" /></div>}
         </div>

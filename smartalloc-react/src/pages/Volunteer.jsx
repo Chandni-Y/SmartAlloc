@@ -78,7 +78,7 @@ const Volunteer = () => {
 
   if (profile) {
     return (
-      <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+      <div className="responsive-container">
         <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1>My Volunteer Profile</h1>
           <p style={{ color: 'var(--text-dim)' }}>Manage your availability.</p>
@@ -150,7 +150,7 @@ const Volunteer = () => {
   }
 
   return (
-    <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+    <div className="responsive-container">
       <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <h1>Volunteer Registration</h1>
         <p style={{ color: 'var(--text-dim)' }}>Join the rapid response community.</p>

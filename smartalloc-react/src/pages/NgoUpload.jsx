@@ -154,7 +154,7 @@ const NgoUpload = () => {
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+    <div className="responsive-container">
       <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <h1>NGO Bulk Upload</h1>
         <p style={{ color: 'var(--text-dim)' }}>AI-driven extraction from unstructured field notes.</p>
@@ -229,14 +229,14 @@ const NgoUpload = () => {
           <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '1rem', marginTop: '1rem' }}>
             {loading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                <span className="animate-pulse">Groq AI is Extracting...</span>
+                <span className="animate-pulse">Gemini AI is Extracting Reports...</span>
               </div>
-            ) : 'Extract & Sync with Groq AI'}
+            ) : 'Analyze & Sync with Gemini Intelligence'}
           </button>
         </form>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: logs.length > 0 ? '1fr 1fr' : '1fr', gap: '1.5rem' }}>
+      <div className="ngo-grid-layout">
         {logs.length > 0 && (
           <div className="glass-card" style={{ maxHeight: '350px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.85rem' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Processing Logs</h3>
