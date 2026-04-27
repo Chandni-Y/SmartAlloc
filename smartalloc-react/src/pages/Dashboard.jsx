@@ -140,14 +140,27 @@ const Dashboard = () => {
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {p.status === 'pending' && <button onClick={() => updateStatus(p.id, 'assigned')} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Assign</button>}
+                {p.status === 'pending' && (
+                  <button 
+                    onClick={() => updateStatus(p.id, 'assigned')} 
+                    disabled={!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer}
+                    className="btn-primary" 
+                    style={{ 
+                      padding: '0.4rem 0.8rem', 
+                      fontSize: '0.8rem',
+                      background: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'rgba(255,255,255,0.1)' : 'var(--primary)',
+                      color: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'var(--text-dim)' : 'white',
+                      cursor: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'not-allowed' : 'pointer'
+                    }}>
+                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Pending Acceptance' : 'Accept Task'}
+                  </button>
+                )}
                 
                 {p.status === 'assigned' && (
                   <button 
                     onClick={() => updateStatus(p.id, 'done')} 
                     disabled={!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer}
                     className="btn-primary" 
-                    title={(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? "Only the assigned volunteer can complete this task." : ""}
                     style={{ 
                       padding: '0.4rem 0.8rem', 
                       fontSize: '0.8rem', 
@@ -155,7 +168,7 @@ const Dashboard = () => {
                       color: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'var(--text-dim)' : 'white',
                       cursor: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'not-allowed' : 'pointer'
                     }}>
-                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Locked' : 'Complete'}
+                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Working' : 'Complete'}
                   </button>
                 )}
               </div>
