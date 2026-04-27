@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { Paperclip, X } from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 
 
@@ -75,35 +76,36 @@ const Home = () => {
     const finalReporterName = isAnonymous ? "Anonymous" : reporterName;
 
     try {
-      // 1. AI Analysis (Local Gemma via Ollama - No Bandwidth)
-      // Note: Standard Gemma 2B is text-only. The image is uploaded to Firebase but not analyzed by the AI.
+      // 1. AI Analysis (Groq Llama 3 - Faster & Reliable)
+      const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
       const prompt = `Analyze this crisis report: "${description}". You must respond ONLY with a valid JSON object matching this exact format: {"type": "Road"|"Water"|"Sewage"|"Medical"|"Electricity"|"Other", "severity": 5, "peopleAffected": 10}. Do not include markdown formatting or extra text.`;
 
-      const ollamaRes = await fetch("http://localhost:11434/api/generate", {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
+          "Authorization": `Bearer ${groqApiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "gemma:2b",
-          prompt: prompt,
-          stream: false,
-          format: "json"
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" }
         })
       });
 
-      if (!ollamaRes.ok) throw new Error("Could not connect to local AI. Is Ollama running?");
-      const ollamaData = await ollamaRes.json();
+      if (!groqRes.ok) {
+        const errorBody = await groqRes.json().catch(() => ({}));
+        throw new Error(`Groq AI Error: ${groqRes.status} ${errorBody.error?.message || groqRes.statusText}`);
+      }
+
+      const groqData = await groqRes.json();
       
       let aiData;
       try {
-        const textResponse = ollamaData.response.trim();
-        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : textResponse;
-        aiData = JSON.parse(jsonStr);
+        aiData = JSON.parse(groqData.choices[0].message.content);
       } catch (parseError) {
-        console.error("Raw Output:", ollamaData.response);
-        throw new Error("Local Gemma failed to return valid JSON. Please try again.");
+        console.error("Raw Output:", groqData.choices[0].message.content);
+        throw new Error("Groq AI failed to return valid JSON. Please try again.");
       }
 
 
