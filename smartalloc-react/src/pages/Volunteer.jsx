@@ -106,6 +106,23 @@ const Volunteer = () => {
               {profile.status === 'available' ? 'Currently Available (Click to set Busy)' : 'Currently Busy (Click to set Available)'}
             </button>
             
+            <button onClick={() => { localStorage.removeItem('volunteerId'); setProfile(null); }} style={{ 
+              padding: '1rem', 
+              borderRadius: '0.5rem', 
+              border: '1px solid var(--primary)', 
+              background: 'transparent',
+              color: 'var(--primary)',
+              cursor: 'pointer', 
+              fontWeight: 'bold',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '0.5rem'
+            }}>
+              <LogOut size={20} />
+              Register Someone Else
+            </button>
+
             <button onClick={deleteProfile} style={{ 
               padding: '1rem', 
               borderRadius: '0.5rem', 
@@ -123,6 +140,10 @@ const Volunteer = () => {
               Delete My Profile
             </button>
           </div>
+          
+          <p style={{ marginTop: '2rem', fontSize: '0.9rem' }}>
+            <a href="/volunteer-list" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View All Registered Volunteers →</a>
+          </p>
         </div>
       </div>
     );
@@ -164,6 +185,9 @@ const Volunteer = () => {
             {isSubmitting ? 'Registering...' : 'Join Response Team'}
           </button>
         </form>
+        <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.9rem' }}>
+          <a href="/volunteer-list" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View All Registered Volunteers →</a>
+        </p>
       </div>
     </div>
   );

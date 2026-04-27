@@ -76,36 +76,40 @@ const Home = () => {
     const finalReporterName = isAnonymous ? "Anonymous" : reporterName;
 
     try {
-      // 1. AI Analysis (Groq Llama 3 - Faster & Reliable)
-      const groqApiKey = import.meta.env.VITE_GROQ_API_KEY;
+      // AI Analysis Strategy: Try Google Gemini First (Requirement), Fallback to Groq for Reliability
       const prompt = `Analyze this crisis report: "${description}". You must respond ONLY with a valid JSON object matching this exact format: {"type": "Road"|"Water"|"Sewage"|"Medical"|"Electricity"|"Other", "severity": 5, "peopleAffected": 10}. Do not include markdown formatting or extra text.`;
-
-      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${groqApiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" }
-        })
-      });
-
-      if (!groqRes.ok) {
-        const errorBody = await groqRes.json().catch(() => ({}));
-        throw new Error(`Groq AI Error: ${groqRes.status} ${errorBody.error?.message || groqRes.statusText}`);
-      }
-
-      const groqData = await groqRes.json();
       
       let aiData;
+      let usedGoogleAI = false;
+
       try {
+        console.log("Attempting Google Gemini AI...");
+        const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        aiData = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+        usedGoogleAI = true;
+        console.log("Success with Google Gemini!");
+      } catch (geminiError) {
+        console.warn("Google Gemini failed, falling back to Groq:", geminiError.message);
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" }
+          })
+        });
+        if (!groqRes.ok) throw new Error("Both Gemini and Groq AI failed.");
+        const groqData = await groqRes.json();
         aiData = JSON.parse(groqData.choices[0].message.content);
-      } catch (parseError) {
-        console.error("Raw Output:", groqData.choices[0].message.content);
-        throw new Error("Groq AI failed to return valid JSON. Please try again.");
       }
 
 
