@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { MapPin, CheckCircle, User, Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -10,8 +10,25 @@ const Dashboard = () => {
   const mapRef = useRef(null);
   const googleMap = useRef(null);
   const markers = useRef({});
+  const [loggedInVolunteer, setLoggedInVolunteer] = useState(null);
 
   useEffect(() => {
+    // Check if a volunteer is logged in
+    const checkVolunteer = async () => {
+      const savedId = localStorage.getItem('volunteerId');
+      if (savedId) {
+        try {
+          const docSnap = await getDoc(doc(db, 'volunteers', savedId));
+          if (docSnap.exists()) {
+            setLoggedInVolunteer({ id: docSnap.id, ...docSnap.data() });
+          }
+        } catch (err) {
+          console.error("Error fetching logged in volunteer:", err);
+        }
+      }
+    };
+    checkVolunteer();
+
     // 1. Load Google Maps
     if (!window.google) {
       const script = document.createElement('script');
@@ -124,7 +141,23 @@ const Dashboard = () => {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {p.status === 'pending' && <button onClick={() => updateStatus(p.id, 'assigned')} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>Assign</button>}
-                {p.status === 'assigned' && <button onClick={() => updateStatus(p.id, 'done')} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: 'var(--accent-green)' }}>Complete</button>}
+                
+                {p.status === 'assigned' && (
+                  <button 
+                    onClick={() => updateStatus(p.id, 'done')} 
+                    disabled={!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer}
+                    className="btn-primary" 
+                    title={(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? "Only the assigned volunteer can complete this task." : ""}
+                    style={{ 
+                      padding: '0.4rem 0.8rem', 
+                      fontSize: '0.8rem', 
+                      background: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'rgba(255,255,255,0.1)' : 'var(--accent-green)',
+                      color: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'var(--text-dim)' : 'white',
+                      cursor: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'not-allowed' : 'pointer'
+                    }}>
+                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Locked' : 'Complete'}
+                  </button>
+                )}
               </div>
             </div>
           ))}
