@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useNavigate } from 'react-router-dom';
 import { Paperclip, X } from 'lucide-react';
+
 
 
 const Home = () => {
@@ -107,13 +107,21 @@ const Home = () => {
       }
 
 
-      // 1.5 Upload File to Storage if exists
+      // 1.5 Bypass Firebase Storage to avoid CORS/Permission errors on cloned repos
+      // We convert the file to a Base64 string and save it directly in Firestore
       let attachmentUrl = null;
       let attachmentType = null;
       if (file) {
-        const fileRef = ref(storage, `reports/${Date.now()}_${file.name}`);
-        const uploadResult = await uploadBytes(fileRef, file);
-        attachmentUrl = await getDownloadURL(uploadResult.ref);
+        if (file.size > 800000) { // Firestore has a 1MB limit per document
+          throw new Error("File is too large (max 800KB). Because you don't own the Firebase project, large video/image uploads are restricted.");
+        }
+        
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve) => {
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+        attachmentUrl = await base64Promise;
         attachmentType = file.type;
       }
 
