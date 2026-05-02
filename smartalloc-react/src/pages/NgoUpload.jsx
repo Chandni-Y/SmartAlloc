@@ -112,14 +112,20 @@ const NgoUpload = () => {
           }
         } catch (e) {}
 
-        // 2. Logic & Match
+        // 2. Logic & Match & Notify
         let score = (prob.severity * 2) + (prob.peopleAffected * 1);
         let priority = score > 15 ? "High" : score > 8 ? "Medium" : "Low";
         
         const skillMap = { "Road": "Construction", "Water": "Plumbing", "Sewage": "Cleaning", "Medical": "Medical", "Electricity": "Electrician" };
         const q = query(collection(db, "volunteers"), where("skill", "==", skillMap[prob.type] || "General"), where("status", "==", "available"), limit(1));
         const vSnap = await getDocs(q);
-        const suggestedVolunteer = vSnap.empty ? null : vSnap.docs[0].data().name;
+        
+        let suggestedVolunteer = null;
+        let suggestedVolunteerId = null;
+        if (!vSnap.empty) {
+          suggestedVolunteer = vSnap.docs[0].data().name;
+          suggestedVolunteerId = vSnap.docs[0].id;
+        }
 
         // 3. Save
         await addDoc(collection(db, 'problems'), {
@@ -128,6 +134,7 @@ const NgoUpload = () => {
           priorityScore: score,
           status: 'pending',
           suggestedVolunteer,
+          suggestedVolunteerId,
           lat, lng,
           aiProcessed: true,
           timestamp: serverTimestamp()

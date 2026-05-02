@@ -77,20 +77,12 @@ const Dashboard = () => {
 
       problems.forEach(async (p) => {
         if (p.lat && p.lng) {
-          const color = p.status === 'done' ? '#10b981' : p.priority === 'High' ? '#ef4444' : p.priority === 'Medium' ? '#f59e0b' : '#94a3b8';
-          
           const marker = new window.google.maps.Marker({
             position: { lat: p.lat, lng: p.lng },
             map: googleMap.current,
             title: p.location,
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              fillColor: color,
-              fillOpacity: 1,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 2,
-              scale: 8
-            }
+            // Using standard Google red marker for maximum reliability
+            icon: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
           });
           markers.current[p.id] = marker;
         }
@@ -99,8 +91,15 @@ const Dashboard = () => {
   }, [problems, mapLoaded]);
 
   const updateStatus = async (id, status) => {
-    await updateDoc(doc(db, 'problems', id), { status });
+    const updateData = { status };
+    if (status === 'assigned' && loggedInVolunteer) {
+      updateData.assignedVolunteerId = loggedInVolunteer.id;
+      updateData.assignedVolunteerName = loggedInVolunteer.name;
+    }
+    await updateDoc(doc(db, 'problems', id), updateData);
   };
+
+  const skillMap = { "Road": "Construction", "Water": "Plumbing", "Sewage": "Cleaning", "Medical": "Medical", "Electricity": "Electrician" };
 
   return (
     <div className="dashboard-layout">
@@ -125,55 +124,74 @@ const Dashboard = () => {
         </div>
 
         <div id="problemFeed">
-          {problems.map(p => (
-            <div key={p.id} className="glass-card problem-card">
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <span className={`status-indicator status-${p.status}`}></span>
-                  <h3 style={{ fontSize: '1rem' }}>{p.location}</h3>
-                  <span className={`priority-badge priority-${p.priority}`}>{p.priority}</span>
+          {problems.map(p => {
+            const isSkillMatch = loggedInVolunteer && skillMap[p.type] === loggedInVolunteer.skill;
+            const isAssignedToMe = loggedInVolunteer && p.assignedVolunteerId === loggedInVolunteer.id;
+
+            return (
+              <div key={p.id} className="glass-card problem-card">
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span className={`status-indicator status-${p.status}`}></span>
+                    <h3 style={{ fontSize: '1rem' }}>{p.location}</h3>
+                    <span className={`priority-badge priority-${p.priority}`}>{p.priority}</span>
+                  </div>
+                  <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>{p.description}</p>
+                  <div style={{ marginTop: '0.8rem', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                    {p.weatherCondition && <span>Weather: {p.weatherCondition} {p.weatherBonusApplied && '⚡'} • </span>}
+                    {p.status === 'pending' ? (
+                      <span style={{ color: isSkillMatch ? 'var(--accent-green)' : 'var(--text-dim)' }}>
+                        Needs: {skillMap[p.type] || 'General'} Support {isSkillMatch ? ' (Match!)' : !loggedInVolunteer ? ' (Login to Accept)' : ''}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--primary)' }}>Assigned to: {p.assignedVolunteerName}</span>
+                    )}
+                  </div>
                 </div>
-                <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>{p.description}</p>
-                <div style={{ marginTop: '0.8rem', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  {p.weatherCondition && <span>Weather: {p.weatherCondition} {p.weatherBonusApplied && '⚡'} • </span>}
-                  {p.suggestedVolunteer && <span style={{ color: 'var(--primary)' }}>Volunteer: {p.suggestedVolunteer}</span>}
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {p.status === 'pending' && (
-                  <button 
-                    onClick={() => updateStatus(p.id, 'assigned')} 
-                    disabled={!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer}
-                    className="btn-primary" 
-                    style={{ 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {p.status === 'pending' && (
+                    <div style={{ 
+                      textAlign: 'right',
                       padding: '0.4rem 0.8rem', 
                       fontSize: '0.8rem',
-                      background: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'rgba(255,255,255,0.1)' : 'var(--primary)',
-                      color: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'var(--text-dim)' : 'white',
-                      cursor: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'not-allowed' : 'pointer'
+                      color: p.suggestedVolunteer ? 'var(--primary)' : 'var(--text-dim)',
+                      fontWeight: 'bold'
                     }}>
-                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Pending Acceptance' : 'Accept Task'}
-                  </button>
-                )}
-                
-                {p.status === 'assigned' && (
-                  <button 
-                    onClick={() => updateStatus(p.id, 'done')} 
-                    disabled={!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer}
-                    className="btn-primary" 
-                    style={{ 
+                      {p.suggestedVolunteer ? (
+                        <span className="animate-pulse">🚀 Dispatching: {p.suggestedVolunteer}...</span>
+                      ) : (
+                        'Searching for Responder...'
+                      )}
+                    </div>
+                  )}
+                  
+                  {p.status === 'assigned' && (
+                    <div style={{ 
+                      textAlign: 'right',
                       padding: '0.4rem 0.8rem', 
                       fontSize: '0.8rem', 
-                      background: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'rgba(255,255,255,0.1)' : 'var(--accent-green)',
-                      color: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'var(--text-dim)' : 'white',
-                      cursor: (!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'not-allowed' : 'pointer'
+                      color: 'var(--accent-green)',
+                      fontWeight: 'bold'
                     }}>
-                    {(!loggedInVolunteer || loggedInVolunteer.name !== p.suggestedVolunteer) ? 'Working' : 'Complete'}
-                  </button>
-                )}
+                      ✅ In Progress ({p.assignedVolunteerName})
+                    </div>
+                  )}
+
+                  {p.status === 'done' && (
+                    <div style={{ 
+                      textAlign: 'right',
+                      padding: '0.4rem 0.8rem', 
+                      fontSize: '0.8rem', 
+                      color: 'var(--text-dim)',
+                      fontWeight: 'bold'
+                    }}>
+                      🏆 Mission Completed
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

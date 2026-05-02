@@ -169,11 +169,18 @@ const Home = () => {
         aiData.severity = 10;
       }
 
-      // 4. Match Volunteer
+      // 4. Match Volunteer & Send Notification
       const skillMap = { "Road": "Construction", "Water": "Plumbing", "Sewage": "Cleaning", "Medical": "Medical", "Electricity": "Electrician" };
       const q = query(collection(db, "volunteers"), where("skill", "==", skillMap[aiData.type] || "General"), where("status", "==", "available"), limit(1));
       const vSnap = await getDocs(q);
-      const suggestedVolunteer = vSnap.empty ? null : vSnap.docs[0].data().name;
+      
+      let suggestedVolunteer = null;
+      let suggestedVolunteerId = null;
+      
+      if (!vSnap.empty) {
+        suggestedVolunteer = vSnap.docs[0].data().name;
+        suggestedVolunteerId = vSnap.docs[0].id;
+      }
 
       const generatedId = "SA-" + Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -188,6 +195,7 @@ const Home = () => {
         weatherBonusApplied: weatherBonus > 0,
         isEmergencyOverride: isEmergency,
         suggestedVolunteer,
+        suggestedVolunteerId,
         trackingId: generatedId,
         status: 'pending',
         lat, lng,
