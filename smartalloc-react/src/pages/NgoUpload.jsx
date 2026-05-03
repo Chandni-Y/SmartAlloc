@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Upload, FileText, Image as ImageIcon, Video, X, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Image as ImageIcon, X, CheckCircle, Database, Activity, Terminal, Cloud, List, Plus, LayoutGrid, Clock } from 'lucide-react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-
 const NgoUpload = () => {
+  const [activeTab, setActiveTab] = useState('new'); // 'new', 'history'
   const [text, setText] = useState('');
   const [ngoName, setNgoName] = useState('');
   const [file, setFile] = useState(null);
@@ -15,7 +14,7 @@ const NgoUpload = () => {
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
-    const q = query(collection(db, 'ngo_uploads'), where('status', '==', 'processed'), limit(10));
+    const q = query(collection(db, 'ngo_uploads'), where('status', '==', 'processed'), limit(15));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUploads(docs.sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis()));
@@ -24,84 +23,28 @@ const NgoUpload = () => {
   }, []);
 
   const addLog = (msg, color = 'var(--text-dim)') => {
-    setLogs(prev => [...prev, { msg, color }]);
+    setLogs(prev => [{ msg, color, time: new Date().toLocaleTimeString() }, ...prev].slice(0, 50));
   };
-
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      addLog(`[System] File selected: ${selectedFile.name}`);
-    }
-  };
-
-  async function fileToGenerativePart(file) {
-    const base64EncodedDataPromise = new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(',')[1]);
-      reader.readAsDataURL(file);
-    });
-    return {
-      inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-    };
-  }
 
   const handleProcess = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setLogs([{ msg: "[System] Starting bulk extraction...", color: 'var(--primary)' }]);
+    setLogs([]);
+    addLog("Initializing Sync Protocol v4.2...", 'var(--primary)');
 
     try {
-      // 1. AI Analysis Strategy: Try Google Gemini First, Fallback to Groq
-      const promptText = text;
-      const prompt = `Analyze the following crisis findings and extract multiple reports. 
-      You must respond ONLY with a valid JSON array of objects, each matching this exact format: 
-      [{"reporterName": "Name or Unknown", "location": "Specific Area", "description": "What happened", "type": "Road"|"Water"|"Sewage"|"Medical"|"Electricity"|"Other", "severity": 5, "peopleAffected": 10}].
-      Raw text: "${promptText}"`;
+      const prompt = `Analyze: "${text}". Respond ONLY with JSON array: [{"reporterName": "Name", "location": "Area", "description": "What", "type": "Road"|"Water"|"Sewage"|"Medical"|"Electricity"|"Other", "severity": 5, "peopleAffected": 10}].`;
 
-      let problems;
-      try {
-        console.log("Attempting Google Gemini AI for bulk extraction...");
-        const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const textResponse = response.text();
-        const jsonMatch = textResponse.match(/\[[\s\S]*\]/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : textResponse;
-        const parsed = JSON.parse(jsonStr);
-        problems = Array.isArray(parsed) ? parsed : (parsed.reports || parsed.problems || [parsed]);
-        console.log("Success with Google Gemini!");
-      } catch (geminiError) {
-        console.warn("Google Gemini failed for bulk extraction, falling back to Groq:", geminiError.message);
-        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" }
-          })
-        });
-        if (!groqRes.ok) throw new Error("Both Gemini and Groq AI failed.");
-        const groqData = await groqRes.json();
-        const textResponse = groqData.choices[0].message.content;
-        const jsonMatch = textResponse.match(/\[[\s\S]*\]/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : textResponse;
-        const parsed = JSON.parse(jsonStr);
-        problems = Array.isArray(parsed) ? parsed : (parsed.reports || parsed.problems || [parsed]);
-      }
+      const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(prompt);
+      const problems = JSON.parse(result.response.text().match(/\[[\s\S]*\]/)[0]);
 
-      
-      addLog(`[AI] Extracted ${problems.length} problems.`, 'var(--accent-green)');
+      addLog(`Extraction complete. ${problems.length} incidents found.`, 'var(--accent-green)');
 
       for (const prob of problems) {
-        addLog(`[Process] Mapping: ${prob.location}...`);
+        addLog(`Mapping: ${prob.location}...`);
         
-        // 1. Geocode
         let lat = 0, lng = 0;
         try {
           const gRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(prob.location)}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`);
@@ -112,180 +55,136 @@ const NgoUpload = () => {
           }
         } catch (e) {}
 
-        // 2. Logic & Match & Notify
-        let score = (prob.severity * 2) + (prob.peopleAffected * 1);
-        let priority = score > 15 ? "High" : score > 8 ? "Medium" : "Low";
+        const sectorWeights = { "Medical": 1.6, "Electricity": 1.4, "Water": 1.1, "Road": 1.0, "Sewage": 0.8 };
+        const weight = sectorWeights[prob.type] || 1.0;
+        let score = ((prob.severity * 2) + (prob.peopleAffected * 0.5)) * weight;
+        let priority = score > 18 ? "High" : score > 10 ? "Medium" : "Low";
         
         const skillMap = { "Road": "Construction", "Water": "Plumbing", "Sewage": "Cleaning", "Medical": "Medical", "Electricity": "Electrician" };
-        const q = query(collection(db, "volunteers"), where("skill", "==", skillMap[prob.type] || "General"), where("status", "==", "available"), limit(1));
-        const vSnap = await getDocs(q);
-        
-        let suggestedVolunteer = null;
-        let suggestedVolunteerId = null;
-        if (!vSnap.empty) {
-          suggestedVolunteer = vSnap.docs[0].data().name;
-          suggestedVolunteerId = vSnap.docs[0].id;
-        }
+        const requiredSkill = skillMap[prob.type] || "General";
 
-        // 3. Save
         await addDoc(collection(db, 'problems'), {
           ...prob,
           priority,
           priorityScore: score,
           status: 'pending',
-          suggestedVolunteer,
-          suggestedVolunteerId,
+          requiredSkill,
           lat, lng,
           aiProcessed: true,
           timestamp: serverTimestamp()
         });
-        
-        addLog(`[Success] Saved ${prob.type} at ${prob.location}`, 'var(--accent-green)');
+        addLog(`Deployment target created: ${prob.type} @ ${prob.location}`, 'var(--accent-green)');
       }
       
-      // 4. Save metadata for the list display
       await addDoc(collection(db, 'ngo_uploads'), {
-        ngoName: ngoName || "Unknown NGO",
-        filename: file ? file.name : "Text Paste",
+        ngoName: ngoName || "Field Agent",
+        filename: file ? file.name : "Text Stream",
         timestamp: serverTimestamp(),
         status: 'processed',
         problemCount: problems.length
       });
 
-      addLog("[System] Bulk upload complete.", 'var(--accent-green)');
+      addLog("Synchronization sequence finalized.", 'var(--accent-green)');
+      setTimeout(() => setActiveTab('history'), 2000);
     } catch (error) {
-      addLog(`[Error] ${error.message}`, 'var(--accent-red)');
+      addLog(`Critical Failure: ${error.message}`, 'var(--accent-red)');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="responsive-container">
-      <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h1>NGO Bulk Upload</h1>
-        <p style={{ color: 'var(--text-dim)' }}>AI-driven extraction from unstructured field notes.</p>
+    <div className="responsive-container animate-fade" style={{ maxWidth: '1100px' }}>
+      <header style={{ marginBottom: '3rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '2rem' }}>
+          <div>
+            <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Data Operations Hub</h1>
+            <p style={{ color: 'var(--text-dim)' }}>Synchronize field observations with the central dispatch network.</p>
+          </div>
+          <div style={{ display: 'flex', background: 'var(--bg-card-solid)', padding: '0.3rem', borderRadius: '1rem', border: '1px solid var(--glass-border)' }}>
+            <button 
+              onClick={() => setActiveTab('new')}
+              style={{ padding: '0.6rem 1.5rem', borderRadius: '0.8rem', border: 'none', background: activeTab === 'new' ? 'var(--primary)' : 'transparent', color: activeTab === 'new' ? 'white' : 'var(--text-dim)', cursor: 'pointer', fontWeight: 'bold', transition: 'var(--transition)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Plus size={18} /> New Sync
+            </button>
+            <button 
+              onClick={() => setActiveTab('history')}
+              style={{ padding: '0.6rem 1.5rem', borderRadius: '0.8rem', border: 'none', background: activeTab === 'history' ? 'var(--primary)' : 'transparent', color: activeTab === 'history' ? 'white' : 'var(--text-dim)', cursor: 'pointer', fontWeight: 'bold', transition: 'var(--transition)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Clock size={18} /> History
+            </button>
+          </div>
+        </div>
       </header>
       
-      <div className="glass-card" style={{ marginBottom: '2rem' }}>
-        <form onSubmit={handleProcess}>
-          <div className="form-group">
-            <label>NGO / Organization Name</label>
-            <input 
-              type="text" 
-              required 
-              placeholder="Enter your organization name" 
-              value={ngoName} 
-              onChange={e => setNgoName(e.target.value)} 
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Findings Description / Context</label>
-            <textarea 
-              rows="3" 
-              placeholder="Paste text findings or add context here..." 
-              value={text} 
-              onChange={e => setText(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Attach Files (Findings, Photos, Videos, Reports)</label>
-            <div className="file-upload-container" style={{ 
-              border: '2px dashed rgba(255,255,255,0.1)', 
-              borderRadius: '0.5rem', 
-              padding: '1.5rem', 
-              textAlign: 'center',
-              position: 'relative',
-              background: 'rgba(255,255,255,0.02)',
-              transition: 'all 0.3s ease'
-            }}>
-              {!file ? (
-                <>
-                  <input 
-                    type="file" 
-                    accept="image/*,video/*,.pdf,.csv,.txt" 
-                    onChange={handleFileChange} 
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} 
-                  />
-                  <div style={{ color: 'var(--text-dim)' }}>
-                    <Upload size={28} style={{ marginBottom: '0.5rem', color: 'var(--primary)' }} />
-                    <p style={{ fontWeight: '500' }}>Drop files here or click to browse</p>
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                  <div style={{ position: 'relative' }}>
-                    {file.type.startsWith('image/') ? <ImageIcon size={32} color="var(--primary)" /> : 
-                     file.type.startsWith('video/') ? <Video size={32} color="var(--primary)" /> : 
-                     <FileText size={32} color="var(--primary)" />}
-                  </div>
-                  <div style={{ textAlign: 'left', flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text)' }}>{file.name}</p>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-dim)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                  <button type="button" onClick={() => setFile(null)} style={{ background: 'rgba(239, 68, 68, 0.15)', border: 'none', color: 'var(--accent-red)', padding: '0.4rem', borderRadius: '50%', cursor: 'pointer' }}>
-                    <X size={16} />
-                  </button>
+      {activeTab === 'new' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }} className="animate-fade">
+          <div className="glass-card" style={{ padding: '2.5rem' }}>
+            <form onSubmit={handleProcess}>
+              <div className="form-group">
+                <label>Issuing Organization</label>
+                <div style={{ position: 'relative' }}>
+                  <Database size={18} style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: 'var(--primary)' }} />
+                  <input type="text" required placeholder="E.g. United Nations, Local Fire Dept" value={ngoName} onChange={e => setNgoName(e.target.value)} style={{ paddingLeft: '3rem' }} />
                 </div>
-              )}
-            </div>
-          </div>
-
-          <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '1rem', marginTop: '1rem' }}>
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                <span className="animate-pulse">Gemini AI is Extracting Reports...</span>
               </div>
-            ) : 'Analyze & Sync with Gemini Intelligence'}
-          </button>
-        </form>
-      </div>
 
-      <div className="ngo-grid-layout">
-        {logs.length > 0 && (
-          <div className="glass-card" style={{ maxHeight: '350px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Processing Logs</h3>
-            {logs.map((log, i) => (
-              <div key={i} style={{ color: log.color, marginBottom: '0.3rem' }}>{log.msg}</div>
-            ))}
+              <div className="form-group">
+                <label>Bulk Field Observations (Paste Data)</label>
+                <textarea rows="8" placeholder="Paste reports here... E.g. 'Found a major water leak at 5th St, about 10 homes affected. Also a downed pole nearby.'" value={text} onChange={e => setText(e.target.value)} required />
+              </div>
+
+              <div className="form-group">
+                <label>Media Source (Optional)</label>
+                <div style={{ border: '2px dashed var(--glass-border)', borderRadius: '1rem', padding: '2rem', textAlign: 'center', position: 'relative', background: 'rgba(255,255,255,0.02)' }}>
+                  {!file ? (
+                    <>
+                      <input type="file" onChange={e => setFile(e.target.files[0])} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                      <Cloud size={32} style={{ color: 'var(--primary)', marginBottom: '1rem' }} />
+                      <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>Attach logs or evidence media</p>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
+                      <FileText size={24} style={{ color: 'var(--primary)' }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.9rem' }}>{file.name}</p>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-dim)' }}>Ready for sync</p>
+                      </div>
+                      <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer' }}><X size={18}/></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '1.2rem', marginTop: '1rem' }}>
+                {loading ? <span style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><Activity className="animate-pulse" /> SYNCHRONIZING...</span> : 'Initiate Bulk Sync'}
+              </button>
+            </form>
           </div>
-        )}
 
-        <div className="glass-card">
-          <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Recent Uploads</h3>
-          {uploads.length === 0 ? (
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem' }}>No uploads recorded yet.</p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--card-border)', textAlign: 'left' }}>
-                    <th style={{ padding: '0.5rem', color: 'var(--text-dim)' }}>File / NGO</th>
-                    <th style={{ padding: '0.5rem', color: 'var(--text-dim)' }}>Date</th>
-                    <th style={{ padding: '0.5rem', color: 'var(--text-dim)' }}>Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploads.map(up => (
-                    <tr key={up.id} style={{ borderBottom: '1px solid var(--card-border)' }}>
-                      <td style={{ padding: '0.8rem 0.5rem' }}>
-                        <div style={{ fontWeight: 'bold' }}>{up.filename}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>{up.ngoName}</div>
-                      </td>
-                      <td style={{ padding: '0.8rem 0.5rem', whiteSpace: 'nowrap' }}>
-                        {up.timestamp?.toDate().toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: '0.8rem 0.5rem' }}>{up.problemCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          
         </div>
-      </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }} className="animate-fade">
+          {uploads.map(up => (
+            <div key={up.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+              <div style={{ width: '50px', height: '50px', borderRadius: '1rem', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                <CheckCircle size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: 0, fontSize: '1rem' }}>{up.ngoName}</h4>
+                <p style={{ margin: '0.2rem 0', fontSize: '0.8rem', color: 'var(--text-dim)' }}>{up.filename}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.8rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-dim)' }}>{up.timestamp?.toDate().toLocaleDateString()}</span>
+                  <span style={{ background: 'var(--primary)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '0.5rem', fontSize: '0.7rem', fontWeight: 'bold' }}>{up.problemCount} Reports</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          {uploads.length === 0 && <div className="glass-card" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '4rem' }}>No sync history recorded.</div>}
+        </div>
+      )}
     </div>
   );
 };
